@@ -1,4 +1,6 @@
 
+out="results/out"
+
 library(stringr)
 
 tt=read.table("out_table.tsv",header=T);
@@ -38,67 +40,33 @@ perform_anova <- function(x) {
 }
 r=apply(dd, 1, perform_anova)
 d <- do.call(rbind, lapply(r, function(x) data.frame(g.pval = x$group.pval, t.pval=x$time.pval)))
+x=data.frame(gene=tt$gene, cbind(dd,d))
+write.table(x, file=paste0(out,"_l2fc_over_0h_anova_group_time_pval.tsv"),col.names=T,row.names=F,quote=F,sep="\t"))
 
-i=!is.na(d$t.pval) & d$t.pval < 0.001
+i=!is.na(d$t.pval) & d$t.pval < 0.01
+#i=!is.na(d$g.pval) & d$g.pval < 0.01
+#i=d$t.pval < 0.01 & d$g.pval < 0.01
 
 m=as.matrix(dd[i,])
 o=order(t)
-Heatmap(m[,o], column_split=g[o], cluster_columns=F)
+library(ComplexHeatmap)
+pdf(file=paste0(out,"_pval_001_full_heatmap.pdf"),height=21);
+Heatmap(m[,o], column_split=g[o], cluster_columns=F,show_row_names=F)
+dev.off();
 
-m1= split(m, paste(c(g,t)))
+library(dplyr)
 
-.data.frame(
-
-split(m,paste(c(g,t)))
-
-
-
-
- )))
-
-g1=str_extract(colnames(m1),"(\\D+COPD)",group=T)
-
-Heatmap(split
-
-
-
-
-aecopd_cols <- grep("AECOPD", colnames(m), value = TRUE)
-stablecopd_cols <- grep("StableCOPD", colnames(m), value = TRUE)
-
-# Function to normalize each group by the 0h time point
-calculate_l2fc <- function(data, group_cols) {
-  # Extract 0h time points for the group
-  group_0h_cols <- grep("_0h", group_cols, value = TRUE)
-  
-  # Loop over each 0h sample to calculate L2FC for subsequent time points
-  for (col_0h in group_0h_cols) {
-    # Extract the prefix to match with other time points (remove "_0h")
-    sample_prefix <- sub("_0h", "", col_0h)
-    time_cols <- grep(paste0(sample_prefix, "_[246]h"), colnames(data), value = TRUE)
-    data[time_cols] <- log2((data[time_cols]+0.1) / (data[[col_0h]]+0.1))
-  }
-  
-  return(data)
+x=paste(g,t)
+m1=data.frame(row.names=row.names(m))
+for( i in x ){
+	m1[[i]] = apply(m[,x %in% i],1,mean);
 }
 
-# Apply normalization for AECOPD and StableCOPD groups
-m_l2fc <- m  # Create a copy of the data
-m_l2fc[aecopd_cols] <- calculate_l2fc(m[, aecopd_cols], aecopd_cols)
-m_l2fc[stablecopd_cols] <- calculate_l2fc(m[, stablecopd_cols], stablecopd_cols)
-m_l2fc=m_l2fc[,- grep("_0h",colnames(m_l2fc))];
+m1= as.matrix(m1)
+g1= str_extract(colnames(m1),"\\D+COPD")
+pdf(file=paste0(out,"_pval_001_short_heatmap.pdf"),height=21,width=5);
+Heatmap(m1, column_split=g1, cluster_columns=F,show_row_names=F)
+dev.off();
 
-o=order(str_extract(colnames(m_l2fc),"\\d+h"))
-Heatmap(m_l2fc[,o],cluster_columns=F, column_split = str_extract(colnames(m_l2fc)[o],"(\\D+COPD)",group=T))
-
-
-
-
-
-
-
-
-library(ComplexHeatmap)
-Heatmap(t(scale(t(m))),column_split=g)
 
 
