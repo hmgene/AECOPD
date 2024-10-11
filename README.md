@@ -6,10 +6,13 @@ We conducted a retest of the ANOVA analysis (p-value < 0.01), focusing on a nest
 
 ### Methodology:
 - Data Acquisition: RNA-seq data was obtained from this source. (https://github.com/hmgene/AECOPD/blob/main/data/RNASeq%20Data%2005-17-19.xlsx)
-- Preprocessing: To minimize batch effects related to patient variability, we normalized each time point against the baseline (0h).
-- Testing: ANOVA was performed using the code available at this link.(https://github.com/hmgene/AECOPD/blob/main/02-heatmap.r)
-- Summarization: Results are summarized here. (https://github.com/hmgene/AECOPD/tree/main/result)
-- Visualization: Plots are available for review at this location. (https://github.com/hmgene/AECOPD/tree/main/result)
+- Analysis:
+ - To correct for patient batch effects, gene expression at each time point was normalized to the 0h values.
+ - Log2 fold changes for the comparisons 2h/0h, 4h/0h, and 6h/0h were used as input data.
+ - The data were analyzed using repeated measures ANOVA (using the lme4 library in R) to assess the effects of group, time, and their interaction.
+ - A multiple correction for false discovery rate (FDR < 0.05) was applied, resulting in the identification of 788 significant genes.
+ - The expression patterns of these 788 genes were visualized by averaging the patient data across time points and groups.
+ - The top annotation displays group patterns as lines, representing the average expression of each gene across the respective clusters.
 
 ### Conclusion:
 Our analysis indicates that the 385 genes with significant time effects do not differentiate between the AECOPD and Stable COPD groups. The observed deviance does not exceed the level of patient heterogeneity.

@@ -2,7 +2,7 @@
 
 library(stringr)
 input="results/rpkm_table.tsv";
-output="results/l2fc_table";
+output="results/l2fc_test_table.tsv";
 
 tt=read.table(input,header=T);
 meta=as.data.frame(do.call("rbind", strsplit(colnames(tt)[-1],"_")))
@@ -17,9 +17,8 @@ for( i in unique(meta$s)){
 	}else{ dd=cbind(dd,x); }
 }
 row.names(dd)=tt[,1]
-dd.meta = meta[ meta$t != "0h",]
-dd.meta$g = factor(dd.meta$g,levels=c("StableCOPD","AECOPD"))
-
+meta = meta[ meta$t != "0h",]
+meta$g = factor(meta$g,levels=c("StableCOPD","AECOPD"))
 
 
 library(lme4)
@@ -28,9 +27,9 @@ library(emmeans)
 perform_anova <- function(x) {
   anova_data <- data.frame(
     expression = unlist(x),
-    subject = factor(dd.meta$s),
-    group = factor(dd.meta$g,levels=c("StableCOPD","AECOPD")),
-    time = factor(dd.meta$t)
+    subject = factor(meta$s),
+    group = factor(meta$g,levels=c("StableCOPD","AECOPD")),
+    time = factor(meta$t)
   )
  
   fit <- tryCatch({
@@ -49,88 +48,59 @@ perform_anova <- function(x) {
   #pairwise_comparisons <- pairs(emm, adjust = "tukey")  # Adjust method can be changed as needed
 }
 r=apply(dd, 1, perform_anova)
-d <- do.call(rbind,x) lapply(r, function(x) data.frame(pval = x$p_val)))
-write.table(cbind(dd,d), file=paste0(output,"_l2fc_over_0h_anova_group_time_pval.tsv"),col.names=T,row.names=F,quote=F,sep="\t"))
+d =cbind(dd, do.call(rbind,r))
+
+output="results/l2fc_test";
+write.table(d, file=paste0(output,".tsv"),col.names=T,row.names=T,quote=F,sep="\t")
+write.table(meta, file=paste0(output,"_meta.tsv"),col.names=T,row.names=T,quote=F,sep="\t")
+
 
 ### group-diff
-i=d$g.pval < 0.01
-m=as.matrix(dd[i,])
-o=order(dd.meta$t)
+m=as.matrix(d[,grep("^X",colnames(d))]);
+row.names(row.names(d))
+j=order(meta$t)
+i=d$gt.pval < 0.01
 library(ComplexHeatmap)
-pdf(file=paste0(output,"_group_pval_001_full_heatmap.pdf"),height=14);
-Heatmap(t(scale(t(m[,o]))), column_split=dd.meta$g[o], cluster_columns=F,show_row_names=T,row_names_gp = gpar(fontsize =6))
-dev.off();
-
-i=d$t.pval < 0.01
-m=as.matrix(dd[i,])
-o=order(dd.meta$t)
-library(ComplexHeatmap)
-#pdf(file=paste0(output,"_group_time_pval_001_full_heatmap.pdf"),height=14);
-Heatmap(t(scale(t(m[,o]))), column_split=dd.meta$t[o], cluster_columns=F,show_row_names=T,row_names_gp = gpar(fontsize =6));
-#dev.off();
-
+Heatmap(t(scale(t(m[i,j]))), column_split=meta$t[j], cluster_columns=F,show_row_names=T,row_names_gp = gpar(fontsize =6))
 
 ## average patient expression
 library(dplyr)
-x=paste(dd.meta$g,dd.meta$t)
+x=paste(meta$g,meta$t)
 m1=data.frame(row.names=row.names(m))
 for( i in x ){
 	m1[[i]] = apply(m[,x %in% i],1,mean);
 }
+p=d$t.pval; p=p[p<1];
+q=p.adjust(p,method="fdr")
+pthre=max(p[ q < 0.05 ])
+i=d$t.pval < pthre
 
-m1= as.matrix(m1)
-g1= str_extract(colnames(m1),"\\D+COPD")
-row_clusters <- cutree(hclust(dist(m1)), k = 8)  # Define 5 clusters for rows
-top_annotation <- HeatmapAnnotation(bar = anno_barplot(column_means))
+m2= t(scale(t(as.matrix(m1[i,]))))
+g1 = str_extract(colnames(m2),"\\D+COPD")
+g1 = factor(g1,levels=c("StableCOPD","AECOPD"))
+row_clusters <- cutree(hclust(dist(m2)), k = 4)  # Define 5 clusters for rows
 
-pdf(file=paste0(output,"_pval_001_short_heatmap.pdf"),height=21,width=5);
-Heatmap(m1, column_split=g1, cluster_columns=F,show_row_names=F,top_annotation=top_annotation, row_names_gp=gpar(fontsize=6))
+cluster_means <- sapply(unique(row_clusters), function(clust) {
+  colMeans(m2[row_clusters == clust, , drop = FALSE])
+})
+
+colnames(cluster_means)=c("1","2","3","4")
+c_colors <- c("1" = "blue", "2" = "green", "3" = "orange", "4" = "purple")
+top_annotation <- HeatmapAnnotation(
+ 	cluster = anno_lines(cluster_means, gp = gpar(col = c_colors[colnames(cluster_means)]))
+)
+right_annotation <- rowAnnotation(
+  cluster = anno_block(gp = gpar(fill = c_colors[as.character(unique(row_clusters))]),
+                       labels = as.character(unique(row_clusters)), 
+                       labels_gp = gpar(col = "black", fontsize = 10))
+)
+
+# Plot the heatmap with both top annotation and right annotation
+pdf(paste0(output,"_heatmap.pdf"),width=4,height=12)
+Heatmap(m2,
+        column_split = g1, cluster_columns = FALSE, show_row_names = TRUE, row_split = row_clusters, row_names_gp = gpar(fontsize = 2),
+        top_annotation = top_annotation, right_annotation = right_annotation)
 dev.off();
 
-library(ComplexHeatmap)
-
-# Assuming m1 is your matrix and g1 defines 5 clusters for rows
-# Calculate row means for each cluster
-m1=t(scale(t(m1)))
-row_means <- rowMeans(m1)
-
-# Create a barplot annotation for the row clusters
-left_annotation <- rowAnnotation(bar = anno_barplot(row_means[row_clusters]))
-top_annotation <- HeatmapAnnotation(bar = anno_barplot(colMeans(m1)))
-
-# Create heatmap with row split and the barplot annotation on the left
-Heatmap(m1, 
-        row_split = row_clusters, 
-        cluster_rows = TRUE, 
-        cluster_columns = FALSE, 
-        show_row_names = FALSE, 
-        top_annotation = top_annotation,
-        left_annotation = left_annotation)
-
-
-
-
-m1_df <- as.data.frame(m1)
-m1_df$Gene <- rownames(m1_df)  # Add gene names to the data frame
-m1_df$Cluster <- factor(row_clusters)  # Add the cluster information
-
-# Convert the matrix to long format for ggplot
-m1_long <- m1_df %>%
-  tidyr::pivot_longer(-c(Gene, Cluster), names_to = "Sample", values_to = "Expression")
-
-# Extract the group and time information from the sample names (assuming they are embedded)
-m1_long$Group <- str_extract(m1_long$Sample, "\\D+COPD")  # Extract group information (e.g., StableCOPD, AECOPD)
-m1_long$Time <- str_extract(m1_long$Sample, "\\d+h")  # Extract time points (e.g., 0h, 2h, 4h, 6h)
-m1_long$Time <- factor(m1_long$Time, levels = c("0h", "2h", "4h", "6h"))  # Ensure time is treated as a factor
-
-# Create line and dot plots for each gene cluster
-ggplot(m1_long, aes(x = Time, y = Expression, color = Group, group = interaction(Gene, Group))) +
-  geom_line() +  # Connect the points with lines for each gene and group
-  geom_point(size = 2) +  # Draw dots for each time point
-  facet_wrap(~ Cluster, scales = "free_y") +  # Create a separate plot for each gene cluster
-  theme_minimal() +  # Use a minimal theme
-  labs(title = "Gene Expression Patterns per Cluster",
-       x = "Time Points", y = "Expression Level") +
-  scale_color_manual(values = c("blue", "red"))  # Adjust color palette for groups
 
 
