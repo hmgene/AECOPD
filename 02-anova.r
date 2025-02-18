@@ -1,22 +1,41 @@
 
 
 library(stringr)
-input="results/rpkm_table.tsv";
-output="results/l2fc_test_table.tsv";
+library(data.table)
+input="results/rpkm_table.tsv.gz";
 
-tt=read.table(input,header=T);
-meta=as.data.frame(do.call("rbind", strsplit(colnames(tt)[-1],"_")))
+tt <- fread(input, header = TRUE)  # Read the file
+tt <- as.data.frame(tt)            # Convert to a data frame
+rownames(tt) <- tt$gene            # Set row names to "gene"
+tt$gene <- NULL                    # Remove the "gene" column if not needed
+tt$V1 = NULL
+
+j=colnames(tt)
+meta=as.data.frame(do.call("rbind", strsplit(j,"_")))
 colnames(meta)=c("s","g","t")
+
+
+i=names(sort(apply(tt,1,mean,na.rm=T),decreasing=T)[1:10000])
+x=tt[i,]
+
+i = names(sort(apply(x,1,var,na.rm=T),decreasing=T)[1:1000])
+
+#i = names(sort(apply(x,1,var,na.rm=T),decreasing=F)[1:1000])
+
+x=t(scale(t(x[i,])))
+Heatmap(x, column_split=meta$g,cluster_columns=F)
+
+
 
 dd=NULL;
 for( i in unique(meta$s)){
-	d0=tt[,-1][,meta$s %in% i & meta$t == "0h" ] + 0.1;
-	d1=tt[,-1][,meta$s %in% i & meta$t != "0h" ] + 0.1;
+	d0=tt[,j][,meta$s %in% i & meta$t == "0h" ] + 0.1;
+	d1=tt[,j][,meta$s %in% i & meta$t != "0h" ] + 0.1;
 	x=log2(d1/d0)
 	if(is.null(dd)){ dd=x;
 	}else{ dd=cbind(dd,x); }
 }
-row.names(dd)=tt[,1]
+row.names(dd)=tt$gene
 meta = meta[ meta$t != "0h",]
 meta$g = factor(meta$g,levels=c("StableCOPD","AECOPD"))
 
@@ -51,15 +70,16 @@ r=apply(dd, 1, perform_anova)
 d =cbind(dd, do.call(rbind,r))
 
 output="results/l2fc_test";
-write.table(d, file=paste0(output,".tsv"),col.names=T,row.names=T,quote=F,sep="\t")
-write.table(meta, file=paste0(output,"_meta.tsv"),col.names=T,row.names=T,quote=F,sep="\t")
-
+write.table(d, file= gzfile(paste0(output,".tsv.gz")),col.names=T,row.names=T,quote=F,sep="\t")
+write.table(meta, file=gzfile(paste0(output,"_meta.tsv.gz")),col.names=T,row.names=T,quote=F,sep="\t")
 
 ### group-diff
-m=as.matrix(d[,grep("^X",colnames(d))]);
+m=as.matrix(d[,!grep("pval",colnames(d))]);
+m = as.matrix(d[,colnames(d)[ -grep("pval",colnames(d)) ]])
 row.names(row.names(d))
+
 j=order(meta$t)
-i=d$gt.pval < 0.01
+i=d$gt.pval < 0.001
 library(ComplexHeatmap)
 Heatmap(t(scale(t(m[i,j]))), column_split=meta$t[j], cluster_columns=F,show_row_names=T,row_names_gp = gpar(fontsize =6))
 
@@ -70,10 +90,12 @@ m1=data.frame(row.names=row.names(m))
 for( i in x ){
 	m1[[i]] = apply(m[,x %in% i],1,mean);
 }
-p=d$t.pval; p=p[p<1];
+p=d$gt.pval;
+p=p[p<1];
 q=p.adjust(p,method="fdr")
-pthre=max(p[ q < 0.05 ])
-i=d$t.pval < pthre
+pthre=max(p[ q < 0.1 ])
+
+i=d$gt.pval < 0.01
 
 m2= t(scale(t(as.matrix(m1[i,]))))
 g1 = str_extract(colnames(m2),"\\D+COPD")
@@ -94,6 +116,9 @@ right_annotation <- rowAnnotation(
                        labels = as.character(unique(row_clusters)), 
                        labels_gp = gpar(col = "black", fontsize = 10))
 )
+output="average_l2fc_gt_lt_0.01"
+
+cat(paste(row.names(m2)[ row_clusters == "1" ],collapse="\n"))
 
 # Plot the heatmap with both top annotation and right annotation
 pdf(paste0(output,"_heatmap.pdf"),width=4,height=12)
