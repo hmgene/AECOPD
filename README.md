@@ -2,6 +2,11 @@
 Bioinformatics Work - Acute Exacerbations of Chronic Obstructive Pulmonary Disease 
 
 ## Results
+
+![Screen Shot 2025-02-18 at 5 32 35 PM](https://github.com/user-attachments/assets/7dc52ea6-d22a-4db3-86c3-154c4d0e3b40)
+Fig 1. Normalized top 1k variable genes expression. 
+
+
 We conducted a retest of the ANOVA analysis (p-value < 0.01), focusing on a nested model that examines the effects of time and group. The analysis revealed a significant time effect within each group, as indicated by a p-value threshold of 0.01. It is noteworthy that we applied a relaxed threshold (without multiple correction or false discovery rate adjustments) to demonstrate that the genes exhibiting significant time effects do not differentiate between the groups.
 
 ### Methodology:
